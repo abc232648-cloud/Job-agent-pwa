@@ -1,0 +1,19 @@
+{
+  "name": "Chief Job Agent",
+  "short_name": "Job Agent",
+  "description": "Chief Job Agent attention inbox and recent operational activity.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#030806",
+  "theme_color": "#07130d",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
