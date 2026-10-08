@@ -1,10 +1,11 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChiefApiError, chiefApi } from './api';
-import { showForegroundNotification } from './serviceWorker';
-import type { ChiefSession, JobNotification, JobState, TimelineItem } from './types';
+import { currentPushSubscription, ensurePushSubscription, removeLocalPushSubscription, showForegroundNotification } from './serviceWorker';
+import type { ChiefSession, JobNotification, JobPushStatus, JobState, TimelineItem } from './types';
 
 const POLL_MS = 15_000;
 const LAST_SEEN_KEY = 'chief.jobs.last-notification-id';
+const NO_PUSH: JobPushStatus = { configured: false, public_key: '', subscribed: false, subscription_count: 0 };
 
 function notificationPermission(): NotificationPermission | 'unsupported' {
   return 'Notification' in window ? Notification.permission : 'unsupported';
@@ -45,6 +46,9 @@ export default function App() {
   const [state, setState] = useState<JobState | null>(null);
   const [notifications, setNotifications] = useState<JobNotification[]>([]);
   const [permission, setPermission] = useState(notificationPermission());
+  const [pushStatus, setPushStatus] = useState<JobPushStatus>(NO_PUSH);
+  const [backgroundPushConnected, setBackgroundPushConnected] = useState(false);
+  const [notificationBusy, setNotificationBusy] = useState(false);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const initializedFeed = useRef(false);
@@ -64,16 +68,18 @@ export default function App() {
         initializedFeed.current = true;
         localStorage.setItem(LAST_SEEN_KEY, String(Math.max(stored, maxId)));
       } else if (announce && maxId > stored) {
-        const newAttention = nextNotifications
-          .filter((item) => item.id > stored && (item.severity === 'ACTION_REQUIRED' || item.severity === 'URGENT'))
-          .sort((a, b) => a.id - b.id);
-        for (const item of newAttention) {
-          await showForegroundNotification(item.title, {
-            body: item.body.slice(0, 500),
-            tag: `chief-job-${item.id}`,
-            data: { url: '/jobs/', severity: item.severity },
-            requireInteraction: item.severity === 'URGENT'
-          });
+        if (!backgroundPushConnected) {
+          const newAttention = nextNotifications
+            .filter((item) => item.id > stored && (item.severity === 'ACTION_REQUIRED' || item.severity === 'URGENT'))
+            .sort((a, b) => a.id - b.id);
+          for (const item of newAttention) {
+            await showForegroundNotification(item.title, {
+              body: item.body.slice(0, 500),
+              tag: `chief-job-${item.id}`,
+              data: { url: '/jobs/', severity: item.severity },
+              requireInteraction: item.severity === 'URGENT'
+            });
+          }
         }
         localStorage.setItem(LAST_SEEN_KEY, String(maxId));
       }
@@ -83,7 +89,33 @@ export default function App() {
     } finally {
       setRefreshing(false);
     }
-  }, [session]);
+  }, [session, backgroundPushConnected]);
+
+  const reconcilePush = useCallback(async () => {
+    if (!session) return;
+    try {
+      const prefs = await chiefApi.notificationPreferences();
+      const status = prefs.job_push ?? NO_PUSH;
+      setPushStatus(status);
+      if (!status.configured || permission !== 'granted') {
+        setBackgroundPushConnected(false);
+        return;
+      }
+      const existing = await currentPushSubscription();
+      if (!existing) {
+        setBackgroundPushConnected(false);
+        return;
+      }
+      const result = await chiefApi.registerJobPush(existing.toJSON(), session.csrf);
+      setPushStatus({ ...status, subscribed: true, subscription_count: result.subscription_count });
+      setBackgroundPushConnected(true);
+    } catch (cause) {
+      setBackgroundPushConnected(false);
+      if (!(cause instanceof ChiefApiError && cause.status === 403)) {
+        setError(cause instanceof Error ? cause.message : 'Unable to reconcile background notifications.');
+      }
+    }
+  }, [session, permission]);
 
   useEffect(() => {
     void chiefApi.session().then((value) => setSession(value)).catch(() => setSession(null)).finally(() => setAuthChecked(true));
@@ -96,6 +128,10 @@ export default function App() {
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(true); }, POLL_MS);
     return () => window.clearInterval(timer);
   }, [session, refresh]);
+
+  useEffect(() => {
+    if (session) void reconcilePush();
+  }, [session, reconcilePush]);
 
   const items = useMemo(() => timeline(notifications, state), [notifications, state]);
   const urgent = notifications.filter((item) => item.read === 0 && item.severity === 'URGENT').length;
@@ -124,12 +160,54 @@ export default function App() {
     setSession(null);
     setState(null);
     setNotifications([]);
+    setPushStatus(NO_PUSH);
+    setBackgroundPushConnected(false);
   }
 
   async function enableNotifications() {
-    if (!('Notification' in window)) return;
-    const result = await Notification.requestPermission();
-    setPermission(result);
+    if (!session || !('Notification' in window)) return;
+    setNotificationBusy(true);
+    setError('');
+    try {
+      const result = await Notification.requestPermission();
+      setPermission(result);
+      if (result !== 'granted') {
+        setBackgroundPushConnected(false);
+        return;
+      }
+      const prefs = await chiefApi.notificationPreferences();
+      const status = prefs.job_push ?? NO_PUSH;
+      setPushStatus(status);
+      if (!status.configured) return; // Foreground alerts still work while the PWA is open.
+      const subscription = await ensurePushSubscription(status.public_key);
+      const registered = await chiefApi.registerJobPush(subscription.toJSON(), session.csrf);
+      setPushStatus({ ...status, subscribed: true, subscription_count: registered.subscription_count });
+      setBackgroundPushConnected(true);
+    } catch (cause) {
+      setBackgroundPushConnected(false);
+      setError(cause instanceof Error ? cause.message : 'Unable to enable notifications.');
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
+  async function disableBackgroundPush() {
+    if (!session) return;
+    setNotificationBusy(true);
+    setError('');
+    try {
+      const current = await currentPushSubscription();
+      if (current) {
+        await chiefApi.unregisterJobPush(current.endpoint, session.csrf);
+        await removeLocalPushSubscription();
+      }
+      setBackgroundPushConnected(false);
+      setPushStatus((value) => ({ ...value, subscribed: false, subscription_count: Math.max(0, value.subscription_count - (current ? 1 : 0)) }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to disable background notifications.');
+    } finally {
+      setNotificationBusy(false);
+    }
   }
 
   if (!authChecked) return <main className="center"><p>Connecting to Chief…</p></main>;
@@ -148,6 +226,14 @@ export default function App() {
     </main>;
   }
 
+  const deliveryText = backgroundPushConnected
+    ? 'Background Web Push is connected. ASK and STOP alerts can arrive while this PWA is closed.'
+    : permission === 'granted' && !pushStatus.configured
+      ? 'Foreground alerts work while this PWA is open. Chief background Web Push is not configured yet.'
+      : permission === 'granted'
+        ? 'Notification permission is granted. Connect this device to enable closed-app ASK and STOP alerts.'
+        : 'Enable alerts to receive important Job Agent decisions. Background delivery is used when Chief Web Push is configured.';
+
   return <main className="shell">
     <header>
       <div><div className="brand">CHIEF / JOB AGENT</div><h1>Notifications</h1></div>
@@ -157,11 +243,12 @@ export default function App() {
     {error && <div className="error" role="alert">{error}</div>}
 
     <section className="notice panel">
-      <div><strong>Notification delivery</strong><p className="muted">Foreground alerts are available now. Closed-app background Web Push still needs the Chief push-subscription/VAPID backend connection.</p></div>
-      {permission === 'default' && <button onClick={() => void enableNotifications()}>Enable alerts</button>}
-      {permission === 'granted' && <span className="pill ok">Permission granted</span>}
+      <div><strong>Notification delivery</strong><p className="muted">{deliveryText}</p></div>
+      {backgroundPushConnected && <button className="secondary" disabled={notificationBusy} onClick={() => void disableBackgroundPush()}>{notificationBusy ? 'Updating…' : 'Disable background'}</button>}
+      {!backgroundPushConnected && permission !== 'denied' && permission !== 'unsupported' && <button disabled={notificationBusy} onClick={() => void enableNotifications()}>{notificationBusy ? 'Connecting…' : permission === 'granted' && pushStatus.configured ? 'Connect background' : 'Enable alerts'}</button>}
       {permission === 'denied' && <span className="pill danger">Blocked in browser</span>}
       {permission === 'unsupported' && <span className="pill">Unsupported</span>}
+      {backgroundPushConnected && <span className="pill ok">Background connected</span>}
     </section>
 
     <section className="stats" aria-label="Job Agent status">
