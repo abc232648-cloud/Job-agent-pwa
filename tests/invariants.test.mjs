@@ -4,9 +4,10 @@ import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('timeline consumes only authoritative jobs notification feed', async () => {
+test('timeline consumes only the dedicated Jobs-authorized event feed', async () => {
   const app = await read('app.js');
-  assert.match(app, /\/api\/notifications\?agent=jobs&sort=newest/);
+  assert.match(app, /\/api\/job-push\/events/);
+  assert.doesNotMatch(app, /\/api\/notifications\?agent=/);
   assert.doesNotMatch(app, /JOB_OPPORTUNITIES|fixture|mock/i);
 });
 
