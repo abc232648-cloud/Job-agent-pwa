@@ -11,6 +11,10 @@ function notificationPermission(): NotificationPermission | 'unsupported' {
   return 'Notification' in window ? Notification.permission : 'unsupported';
 }
 
+function lastSeenStorageKey(principalId: string): string {
+  return `${LAST_SEEN_KEY}.${encodeURIComponent(principalId)}`;
+}
+
 function asTime(value: string): string {
   const date = new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -63,10 +67,11 @@ export default function App() {
       setError('');
 
       const maxId = nextNotifications.reduce((max, item) => Math.max(max, item.id), 0);
-      const stored = Number(localStorage.getItem(LAST_SEEN_KEY) || '0');
+      const storageKey = lastSeenStorageKey(session.principal.id);
+      const stored = Number(localStorage.getItem(storageKey) || '0');
       if (!initializedFeed.current) {
         initializedFeed.current = true;
-        localStorage.setItem(LAST_SEEN_KEY, String(Math.max(stored, maxId)));
+        localStorage.setItem(storageKey, String(Math.max(stored, maxId)));
       } else if (announce && maxId > stored) {
         if (!backgroundPushConnected) {
           const newAttention = nextNotifications
@@ -81,7 +86,7 @@ export default function App() {
             });
           }
         }
-        localStorage.setItem(LAST_SEEN_KEY, String(maxId));
+        localStorage.setItem(storageKey, String(maxId));
       }
     } catch (cause) {
       if (cause instanceof ChiefApiError && cause.status === 401) setSession(null);
