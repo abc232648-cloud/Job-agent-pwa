@@ -41,6 +41,19 @@ export interface JobState {
   worker: { status: string; message: string; updated_at: string | null };
 }
 
+export interface JobPushStatus {
+  configured: boolean;
+  public_key: string;
+  subscribed: boolean;
+  subscription_count: number;
+}
+
+export interface NotificationPreferences {
+  delivery: 'all' | 'critical' | 'quiet';
+  sort: 'newest' | 'oldest';
+  job_push?: JobPushStatus;
+}
+
 export interface TimelineItem {
   key: string;
   at: string;
