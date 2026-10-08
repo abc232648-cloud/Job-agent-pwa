@@ -18,6 +18,10 @@ const els = {
   eventTemplate: document.querySelector('#eventTemplate')
 };
 
+function notificationsSupported() {
+  return typeof window !== 'undefined' && 'Notification' in window;
+}
+
 function formatWhen(value) {
   if (!value) return 'Unknown time';
   const date = new Date(value);
@@ -73,6 +77,18 @@ function render() {
   els.urgentCount.textContent = String(state.notifications.filter(item => normalizeSeverity(item.severity) === 'URGENT').length);
 }
 
+function renderFetchError(error) {
+  els.connectionBadge.textContent = 'Chief unavailable';
+  els.connectionBadge.className = 'badge error';
+  if (state.notifications.length) return;
+  const failure = document.createElement('div');
+  failure.className = 'empty-state error-state';
+  failure.textContent = `Unable to load authoritative Job Agent events. ${String(error?.message || error)}`;
+  els.timeline.replaceChildren(failure);
+  els.unreadCount.textContent = '—';
+  els.urgentCount.textContent = '—';
+}
+
 async function fetchJobNotifications({ notifyOnNew = true } = {}) {
   els.refreshButton.disabled = true;
   try {
@@ -86,14 +102,12 @@ async function fetchJobNotifications({ notifyOnNew = true } = {}) {
     if (!Array.isArray(payload)) throw new Error('Unexpected notifications response');
 
     const incomingIds = new Set(payload.map(item => String(item.id)));
-    if (notifyOnNew && !state.firstLoad && Notification.permission === 'granted') {
+    if (notifyOnNew && !state.firstLoad && notificationsSupported() && Notification.permission === 'granted') {
       const newAttention = payload.filter(item =>
         !state.seenIds.has(String(item.id)) &&
         ['URGENT', 'ACTION_REQUIRED'].includes(normalizeSeverity(item.severity))
       );
-      for (const item of newAttention.slice(0, 3)) {
-        await showLocalNotification(item);
-      }
+      for (const item of newAttention.slice(0, 3)) await showLocalNotification(item);
     }
 
     state.notifications = payload.slice(0, 50);
@@ -103,13 +117,7 @@ async function fetchJobNotifications({ notifyOnNew = true } = {}) {
     els.connectionBadge.className = 'badge ok';
     render();
   } catch (error) {
-    els.connectionBadge.textContent = 'Chief unavailable';
-    els.connectionBadge.className = 'badge error';
-    if (!state.notifications.length) {
-      els.timeline.innerHTML = `<div class="empty-state error-state">Unable to load authoritative Job Agent events. ${String(error.message || error)}</div>`;
-      els.unreadCount.textContent = '—';
-      els.urgentCount.textContent = '—';
-    }
+    renderFetchError(error);
   } finally {
     els.refreshButton.disabled = false;
   }
@@ -125,7 +133,7 @@ async function registerServiceWorker() {
 }
 
 async function showLocalNotification(item) {
-  if (Notification.permission !== 'granted') return;
+  if (!notificationsSupported() || Notification.permission !== 'granted') return;
   const registration = await navigator.serviceWorker.ready.catch(() => null);
   const options = {
     body: item.body || '',
@@ -138,7 +146,7 @@ async function showLocalNotification(item) {
 }
 
 function refreshPermissionUI() {
-  if (!('Notification' in window)) {
+  if (!notificationsSupported()) {
     els.pushStatus.textContent = 'This browser does not expose the Notification API.';
     els.enableNotifications.disabled = true;
     return;
@@ -155,7 +163,7 @@ function refreshPermissionUI() {
 }
 
 async function enableNotifications() {
-  if (!('Notification' in window) || Notification.permission === 'denied') return;
+  if (!notificationsSupported() || Notification.permission === 'denied') return;
   await registerServiceWorker();
   if (Notification.permission === 'default') await Notification.requestPermission();
   refreshPermissionUI();
