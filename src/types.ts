@@ -26,21 +26,6 @@ export interface JobNotification {
   presented?: number;
 }
 
-export interface JobCommand {
-  id: number;
-  instruction: string;
-  status: string;
-  result: string;
-  created_at: string;
-  processed_at?: string | null;
-}
-
-export interface JobState {
-  counts: { jobs: number; applications: number; actions: number; notifications: number };
-  commands: JobCommand[];
-  worker: { status: string; message: string; updated_at: string | null };
-}
-
 export interface JobActivityEvent {
   id: string;
   occurred_at: string;
@@ -56,6 +41,7 @@ export interface JobActivityEvent {
 export interface JobActivityFeed {
   events: JobActivityEvent[];
   counts: { unread: number; action_required: number; urgent: number };
+  job_counts: { jobs: number; applications: number; actions: number };
   limit: number;
   privacy: string;
 }
