@@ -1,4 +1,4 @@
-import type { ChiefSession, JobNotification, JobState } from './types';
+import type { ChiefSession, JobNotification, JobState, NotificationPreferences } from './types';
 
 export class ChiefApiError extends Error {
   constructor(public status: number, message: string) {
@@ -38,5 +38,8 @@ export const chiefApi = {
   login: (username: string, password: string) => request<{ status: string; csrf: string }>('/api/auth/login', { method: 'POST', body: { username, password } }),
   logout: (csrf: string) => request<{ status: string }>('/api/auth/logout', { method: 'POST', body: {}, csrf }),
   jobState: () => request<JobState>('/api/ui/job-state'),
-  jobNotifications: () => request<JobNotification[]>('/api/notifications?agent=jobs&sort=newest')
+  jobNotifications: () => request<JobNotification[]>('/api/notifications?agent=jobs&sort=newest'),
+  notificationPreferences: () => request<NotificationPreferences>('/api/notification-preferences'),
+  registerJobPush: (subscription: PushSubscriptionJSON, csrf: string) => request<{ status: string; subscription_count: number }>('/api/notifications/push-subscription', { method: 'POST', body: subscription, csrf }),
+  unregisterJobPush: (endpoint: string, csrf: string) => request<{ status: string }>('/api/notifications/push-unsubscribe', { method: 'POST', body: { endpoint }, csrf })
 };
