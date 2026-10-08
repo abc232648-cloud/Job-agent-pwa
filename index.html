@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#07130d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Job Agent" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>Chief Job Agent</title>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">CHIEF · JOB AGENT</p>
+        <h1>Attention & recent activity</h1>
+      </div>
+      <div id="connectionBadge" class="badge neutral">Checking Chief…</div>
+    </header>
+
+    <section class="hero-grid" aria-label="Job Agent status">
+      <article class="card primary-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">NOTIFICATIONS</p>
+            <h2>Only interrupt me when it matters.</h2>
+          </div>
+          <span id="permissionDot" class="status-dot"></span>
+        </div>
+        <p class="muted">ASK and STOP events are attention-worthy. Routine AUTO-ACT work remains quiet.</p>
+        <div class="button-row">
+          <button id="enableNotifications" class="button primary">Enable notifications</button>
+          <button id="refreshButton" class="button secondary">Refresh</button>
+        </div>
+        <p id="pushStatus" class="small-note" role="status">Checking browser notification support…</p>
+      </article>
+
+      <article class="card metric-card">
+        <p class="eyebrow">UNREAD</p>
+        <strong id="unreadCount">—</strong>
+        <span>Job Agent notifications</span>
+      </article>
+      <article class="card metric-card urgent">
+        <p class="eyebrow">URGENT</p>
+        <strong id="urgentCount">—</strong>
+        <span>STOP / urgent events</span>
+      </article>
+    </section>
+
+    <section class="card timeline-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">RECENT LOG</p>
+          <h2>Recent Job Agent events</h2>
+        </div>
+        <label class="filter-label">Show
+          <select id="severityFilter">
+            <option value="">All</option>
+            <option value="URGENT">Urgent</option>
+            <option value="ACTION_REQUIRED">Action required</option>
+            <option value="INFO">Info</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted compact">This is a safe operational timeline from Chief notifications, not raw application/server logs.</p>
+      <div id="timeline" class="timeline" aria-live="polite">
+        <div class="empty-state">Loading recent activity…</div>
+      </div>
+    </section>
+
+    <section class="card boundary-card">
+      <p class="eyebrow">AUTHORITY BOUNDARY</p>
+      <div class="authority-grid">
+        <div><strong>AUTO-ACT</strong><span>Runs quietly</span></div>
+        <div><strong>ASK</strong><span>Notify + require your decision</span></div>
+        <div><strong>STOP</strong><span>Halt + urgent notification</span></div>
+      </div>
+    </section>
+  </main>
+
+  <template id="eventTemplate">
+    <article class="event-row">
+      <span class="event-marker"></span>
+      <div class="event-copy">
+        <div class="event-head">
+          <strong class="event-title"></strong>
+          <time class="event-time"></time>
+        </div>
+        <p class="event-body"></p>
+        <div class="event-meta"></div>
+      </div>
+    </article>
+  </template>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
