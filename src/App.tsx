@@ -143,8 +143,8 @@ export default function App() {
     try {
       await chiefApi.login(username.trim(), password);
       const active = await chiefApi.session();
-      if (!active.principal.domains.includes('jobs') && !['Owner', 'Administrator'].includes(active.principal.role)) {
-        setError('This Chief identity does not have Job Agent access.');
+      if (!['Owner', 'Administrator'].includes(active.principal.role)) {
+        setError('This Job Agent oversight PWA requires an Owner or Administrator identity.');
         return;
       }
       setSession(active);
@@ -217,7 +217,7 @@ export default function App() {
       <form className="login panel" onSubmit={signIn}>
         <div className="brand">CHIEF / JOB AGENT</div>
         <h1>Private oversight</h1>
-        <p className="muted">Notifications and recent Job Agent activity. Chief remains authoritative.</p>
+        <p className="muted">Owner/Admin notifications and recent Job Agent activity. Chief remains authoritative.</p>
         <label>Username<input autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required /></label>
         <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
         {error && <div className="error" role="alert">{error}</div>}
