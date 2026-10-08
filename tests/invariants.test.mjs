@@ -26,7 +26,17 @@ test('service worker has explicit push and notification click handlers', async (
 test('client notification policy only foreground-alerts ASK/URGENT equivalents', async () => {
   const app = await read('app.js');
   assert.match(app, /\['URGENT', 'ACTION_REQUIRED'\]\.includes/);
-  assert.match(app, /Background Web Push delivery remains inactive/);
+  assert.match(app, /!state\.backgroundPushActive/);
+});
+
+test('background push registration uses Chief auth session and in-memory CSRF', async () => {
+  const app = await read('app.js');
+  assert.match(app, /\/api\/auth\/session/);
+  assert.match(app, /\/api\/job-push\/config/);
+  assert.match(app, /pushManager\.subscribe/);
+  assert.match(app, /\/api\/job-push\/subscribe/);
+  assert.match(app, /X-Chief-CSRF/);
+  assert.doesNotMatch(app, /localStorage|sessionStorage/);
 });
 
 test('manifest is scoped to the Job Agent app', async () => {
