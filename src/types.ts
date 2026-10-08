@@ -41,6 +41,25 @@ export interface JobState {
   worker: { status: string; message: string; updated_at: string | null };
 }
 
+export interface JobActivityEvent {
+  id: string;
+  occurred_at: string;
+  source: 'notification' | 'application' | 'command';
+  severity: Severity;
+  title: string;
+  summary: string;
+  status: string;
+  related_page: string;
+  unread: boolean;
+}
+
+export interface JobActivityFeed {
+  events: JobActivityEvent[];
+  counts: { unread: number; action_required: number; urgent: number };
+  limit: number;
+  privacy: string;
+}
+
 export interface JobPushStatus {
   configured: boolean;
   public_key: string;
@@ -52,13 +71,4 @@ export interface NotificationPreferences {
   delivery: 'all' | 'critical' | 'quiet';
   sort: 'newest' | 'oldest';
   job_push?: JobPushStatus;
-}
-
-export interface TimelineItem {
-  key: string;
-  at: string;
-  title: string;
-  detail: string;
-  severity: Severity | 'COMMAND';
-  unread: boolean;
 }
