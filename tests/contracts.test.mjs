@@ -9,13 +9,25 @@ const worker = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8
 const manifest = JSON.parse(await readFile(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'));
 const vite = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8');
 
-test('client uses live Chief job contracts rather than mock data', () => {
-  assert.match(api, /\/api\/ui\/job-state/);
+test('client uses live sanitized Chief contracts rather than raw job-state or mock data', () => {
+  assert.match(api, /\/api\/ui\/job-feed/);
+  assert.doesNotMatch(api, /\/api\/ui\/job-state/);
   assert.match(api, /\/api\/notifications\?agent=jobs&sort=newest/);
   assert.match(api, /\/api\/notification-preferences/);
   assert.match(api, /\/api\/notifications\/push-subscription/);
   assert.match(api, /\/api\/notifications\/push-unsubscribe/);
   assert.doesNotMatch(api, /mock|fixture/i);
+});
+
+test('recent activity renders only the sanitized feed projection', () => {
+  assert.match(app, /chiefApi\.jobFeed\(\)/);
+  assert.match(app, /activity\?\.events/);
+  assert.match(app, /item\.summary/);
+  assert.match(app, /activity\?\.job_counts\.actions/);
+  assert.match(app, /activity\?\.job_counts\.applications/);
+  assert.doesNotMatch(app, /state\?\.commands/);
+  assert.doesNotMatch(app, /command\.instruction|command\.result/);
+  assert.doesNotMatch(app, /chiefApi\.jobState/);
 });
 
 test('service worker never caches Chief API responses', () => {
