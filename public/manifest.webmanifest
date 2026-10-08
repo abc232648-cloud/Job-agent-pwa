@@ -1,0 +1,14 @@
+{
+  "id": "/jobs/",
+  "name": "Chief Job Agent",
+  "short_name": "Job Agent",
+  "description": "Private notification and oversight client for Chief Job Agent.",
+  "start_url": "/jobs/",
+  "scope": "/jobs/",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#111827",
+  "icons": [
+    { "src": "/jobs/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
