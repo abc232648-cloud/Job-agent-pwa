@@ -1,7 +1,7 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ChiefApiError, chiefApi } from './api';
 import { currentPushSubscription, ensurePushSubscription, removeLocalPushSubscription, showForegroundNotification } from './serviceWorker';
-import type { ChiefSession, JobNotification, JobPushStatus, JobState, TimelineItem } from './types';
+import type { ChiefSession, JobActivityFeed, JobNotification, JobPushStatus } from './types';
 
 const POLL_MS = 15_000;
 const LAST_SEEN_KEY = 'chief.jobs.last-notification-id';
@@ -20,26 +20,12 @@ function asTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function timeline(notifications: JobNotification[], state: JobState | null): TimelineItem[] {
-  const items: TimelineItem[] = notifications.map((item) => ({
-    key: `n-${item.id}`,
-    at: item.created_at,
-    title: item.title,
-    detail: item.body,
-    severity: item.severity,
-    unread: item.read === 0
-  }));
-  for (const command of state?.commands ?? []) {
-    items.push({
-      key: `c-${command.id}`,
-      at: command.created_at,
-      title: `Command ${command.status}`,
-      detail: command.result || command.instruction,
-      severity: 'COMMAND',
-      unread: false
-    });
-  }
-  return items.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 40);
+function eventLabel(source: string, severity: string): string {
+  if (severity === 'URGENT') return 'STOP / urgent';
+  if (severity === 'ACTION_REQUIRED') return 'ASK / action required';
+  if (source === 'command') return 'worker command';
+  if (source === 'application') return 'application';
+  return 'info';
 }
 
 export default function App() {
@@ -47,7 +33,7 @@ export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [state, setState] = useState<JobState | null>(null);
+  const [activity, setActivity] = useState<JobActivityFeed | null>(null);
   const [notifications, setNotifications] = useState<JobNotification[]>([]);
   const [permission, setPermission] = useState(notificationPermission());
   const [pushStatus, setPushStatus] = useState<JobPushStatus>(NO_PUSH);
@@ -61,8 +47,8 @@ export default function App() {
     if (!session) return;
     setRefreshing(true);
     try {
-      const [nextState, nextNotifications] = await Promise.all([chiefApi.jobState(), chiefApi.jobNotifications()]);
-      setState(nextState);
+      const [nextActivity, nextNotifications] = await Promise.all([chiefApi.jobFeed(), chiefApi.jobNotifications()]);
+      setActivity(nextActivity);
       setNotifications(nextNotifications);
       setError('');
 
@@ -138,7 +124,7 @@ export default function App() {
     if (session) void reconcilePush();
   }, [session, reconcilePush]);
 
-  const items = useMemo(() => timeline(notifications, state), [notifications, state]);
+  const items = activity?.events ?? [];
   const urgent = notifications.filter((item) => item.read === 0 && item.severity === 'URGENT').length;
   const actionRequired = notifications.filter((item) => item.read === 0 && item.severity === 'ACTION_REQUIRED').length;
 
@@ -163,7 +149,7 @@ export default function App() {
     if (!session) return;
     try { await chiefApi.logout(session.csrf); } catch {}
     setSession(null);
-    setState(null);
+    setActivity(null);
     setNotifications([]);
     setPushStatus(NO_PUSH);
     setBackgroundPushConnected(false);
@@ -259,16 +245,16 @@ export default function App() {
     <section className="stats" aria-label="Job Agent status">
       <article className="panel"><span>Urgent</span><strong>{urgent}</strong><small>unread STOP-style alerts</small></article>
       <article className="panel"><span>Needs you</span><strong>{actionRequired}</strong><small>unread ASK alerts</small></article>
-      <article className="panel"><span>Pending actions</span><strong>{state?.counts.actions ?? '—'}</strong><small>Chief action queue</small></article>
-      <article className="panel"><span>Applications</span><strong>{state?.counts.applications ?? '—'}</strong><small>recorded by Chief</small></article>
+      <article className="panel"><span>Pending actions</span><strong>{activity?.job_counts.actions ?? '—'}</strong><small>Chief action queue</small></article>
+      <article className="panel"><span>Applications</span><strong>{activity?.job_counts.applications ?? '—'}</strong><small>recorded by Chief</small></article>
     </section>
 
     <section className="timeline panel">
       <div className="sectionHead"><div><h2>Recent activity</h2><p className="muted">Safe structured events, not raw server logs.</p></div><span className="pill">15s live refresh</span></div>
       {items.length === 0 ? <p className="empty">No recent Job Agent activity.</p> : <ol>
-        {items.map((item) => <li key={item.key} className={`event ${item.severity.toLowerCase()}`}>
+        {items.map((item) => <li key={item.id} className={`event ${item.severity.toLowerCase()}`}>
           <div className="eventMark" aria-hidden="true" />
-          <div className="eventBody"><div className="eventTop"><strong>{item.title}</strong><time>{asTime(item.at)}</time></div><p>{item.detail}</p><div className="eventMeta"><span>{item.severity === 'URGENT' ? 'STOP / urgent' : item.severity === 'ACTION_REQUIRED' ? 'ASK / action required' : item.severity === 'COMMAND' ? 'worker command' : 'info'}</span>{item.unread && <span>unread</span>}</div></div>
+          <div className="eventBody"><div className="eventTop"><strong>{item.title}</strong><time>{asTime(item.occurred_at)}</time></div><p>{item.summary}</p><div className="eventMeta"><span>{eventLabel(item.source, item.severity)}</span>{item.unread && <span>unread</span>}</div></div>
         </li>)}
       </ol>}
     </section>
