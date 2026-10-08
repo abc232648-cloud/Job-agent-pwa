@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Chief Job Agent">
+  <rect width="512" height="512" rx="112" fill="#07130d"/>
+  <path d="M116 165c0-27 22-49 49-49h182c27 0 49 22 49 49v150c0 27-22 49-49 49H230l-72 50 17-50h-10c-27 0-49-22-49-49V165Z" fill="#0f2a1c" stroke="#58e294" stroke-width="20"/>
+  <path d="M180 205h152M180 256h105M180 307h130" stroke="#dff7e9" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="350" cy="307" r="20" fill="#ff6b78"/>
+</svg>
