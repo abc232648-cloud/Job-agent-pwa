@@ -89,7 +89,7 @@ function renderFetchError(error) {
   if (state.notifications.length) return;
   const failure = document.createElement('div');
   failure.className = 'empty-state error-state';
-  failure.textContent = `Unable to load authoritative Job Agent events. ${String(error?.message || error)}`;
+  failure.textContent = `Unable to load authorized Job Agent events. ${String(error?.message || error)}`;
   els.timeline.replaceChildren(failure);
   els.unreadCount.textContent = '—';
   els.urgentCount.textContent = '—';
@@ -97,11 +97,12 @@ function renderFetchError(error) {
 
 async function fetchJson(path, options = {}) {
   if (!path.startsWith('/api/') || path.startsWith('//')) throw new Error('Unsafe Chief API path');
+  const { headers: extraHeaders = {}, ...requestOptions } = options;
   const response = await fetch(path, {
     credentials: 'include',
     cache: 'no-store',
-    headers: { Accept: 'application/json', ...(options.headers || {}) },
-    ...options
+    ...requestOptions,
+    headers: { Accept: 'application/json', ...extraHeaders }
   });
   let payload = {};
   try { payload = await response.json(); } catch { payload = {}; }
@@ -135,8 +136,8 @@ async function chiefPost(path, body) {
 async function fetchJobNotifications({ notifyOnNew = true } = {}) {
   els.refreshButton.disabled = true;
   try {
-    const payload = await fetchJson('/api/notifications?agent=jobs&sort=newest');
-    if (!Array.isArray(payload)) throw new Error('Unexpected notifications response');
+    const payload = await fetchJson('/api/job-push/events');
+    if (!Array.isArray(payload)) throw new Error('Unexpected Job Agent events response');
 
     const incomingIds = new Set(payload.map(item => String(item.id)));
     if (notifyOnNew && !state.firstLoad && !state.backgroundPushActive && notificationsSupported() && Notification.permission === 'granted') {
