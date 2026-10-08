@@ -35,11 +35,23 @@ test('service worker supports background push reception and safe click routing',
   assert.match(worker, /showNotification/);
   assert.match(worker, /addEventListener\('notificationclick'/);
   assert.match(worker, /target\.origin !== SCOPE_URL\.origin/);
+  assert.match(worker, /requireInteraction:\s*severity === 'URGENT'/);
 });
 
-test('foreground polling does not duplicate a connected background alert', () => {
+test('foreground polling only elevates ASK and STOP equivalents and avoids duplicate background alerts', () => {
   assert.match(app, /if \(!backgroundPushConnected\)/);
+  assert.match(app, /item\.severity === 'ACTION_REQUIRED' \|\| item\.severity === 'URGENT'/);
   assert.match(app, /chief-job-\$\{item\.id\}/);
+  assert.match(app, /requireInteraction:\s*item\.severity === 'URGENT'/);
+});
+
+test('browser persistence is limited to an identity-scoped notification cursor', () => {
+  assert.match(app, /function lastSeenStorageKey\(principalId: string\)/);
+  assert.match(app, /lastSeenStorageKey\(session\.principal\.id\)/);
+  assert.match(app, /localStorage\.getItem\(storageKey\)/);
+  assert.match(app, /localStorage\.setItem\(storageKey, String\(/);
+  assert.doesNotMatch(app, /sessionStorage/);
+  assert.doesNotMatch(app, /localStorage\.(?:getItem|setItem)\([^)]*(?:csrf|password|session|body|title)/i);
 });
 
 test('PWA is scoped to the Job Agent path', () => {
