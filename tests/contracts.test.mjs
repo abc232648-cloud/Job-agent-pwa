@@ -44,6 +44,13 @@ test('private view is cleared on auth denial and account/session change', () => 
   assert.match(app, /\[401, 403\]\.includes\(cause\.status\)/);
 });
 
+test('after-timeout notification consent remains distinct from signed-in access', () => {
+  assert.match(app, /registerJobPush\(subscription\.toJSON\(\), session\.csrf, true\)/);
+  assert.match(app, /pushStatus\.after_timeout/);
+  assert.match(app, /does not keep you signed in/);
+  assert.match(app, /Sign in to view private details/);
+});
+
 test('service worker never caches Chief API responses', () => {
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
   assert.match(worker, /event\.respondWith\(fetch\(request\)\)/);
