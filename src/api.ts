@@ -40,6 +40,6 @@ export const chiefApi = {
   jobFeed: () => request<JobActivityFeed>('/api/ui/job-feed'),
   jobNotifications: () => request<JobNotification[]>('/api/notifications?agent=jobs&sort=newest'),
   notificationPreferences: () => request<NotificationPreferences>('/api/notification-preferences'),
-  registerJobPush: (subscription: PushSubscriptionJSON, csrf: string) => request<{ status: string; subscription_count: number }>('/api/notifications/push-subscription', { method: 'POST', body: subscription, csrf }),
+  registerJobPush: (subscription: PushSubscriptionJSON, csrf: string, afterTimeout?: boolean) => request<{ status: string; subscription_count: number; after_timeout: boolean }>('/api/notifications/push-subscription', { method: 'POST', body: afterTimeout === undefined ? subscription : { ...subscription, after_timeout: afterTimeout }, csrf }),
   unregisterJobPush: (endpoint: string, csrf: string) => request<{ status: string }>('/api/notifications/push-unsubscribe', { method: 'POST', body: { endpoint }, csrf })
 };
