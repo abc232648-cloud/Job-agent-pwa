@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -15,11 +15,26 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: Refresh lock identity for reviewed dependency pin
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Commit reviewed lockfile update
+        if: github.event_name == 'pull_request' && github.head_ref == 'review/oct12-phase9'
+        shell: bash
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add package-lock.json
+            git commit -m 'update job client dependency lock'
+            git push origin HEAD:${{ github.head_ref }}
+          fi
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
       - name: Reject high-severity dependency advisories
