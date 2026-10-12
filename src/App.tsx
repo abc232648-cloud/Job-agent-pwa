@@ -243,7 +243,9 @@ export default function App() {
   }
 
   const deliveryText = backgroundPushConnected
-    ? 'Background Web Push is connected while your Chief session remains valid. Sign in again after expiry to reconnect alerts.'
+    ? pushStatus.after_timeout
+      ? 'Generic ASK/STOP alerts may continue after Chief idle timeout under this device consent. Sign in to view private details.'
+      : 'Background Web Push is connected only while the current Chief session remains valid.'
     : permission === 'granted' && !pushStatus.configured
       ? 'Foreground alerts work while this PWA is open. Chief background Web Push is not configured yet.'
       : permission === 'granted'
@@ -261,7 +263,7 @@ export default function App() {
     <section className="notice panel">
       <div><strong>Notification delivery</strong><p className="muted">{deliveryText}</p></div>
       {backgroundPushConnected && <button className="secondary" disabled={notificationBusy} onClick={() => void disableBackgroundPush()}>{notificationBusy ? 'Updating…' : 'Disable background'}</button>}
-      <p>Opted-in alerts continue after session timeout. Sign-out or account switching stops them. Notification text stays private until sign-in.</p>
+      <p>Explicit after-timeout device consent does not keep you signed in. Sign-out, account switching, access changes, or disabling Job access stops delivery.</p>
       {(!backgroundPushConnected || !pushStatus.after_timeout) && permission !== 'denied' && permission !== 'unsupported' && <button disabled={notificationBusy} onClick={() => void enableNotifications()}>{notificationBusy ? 'Connecting…' : permission === 'granted' && pushStatus.configured ? 'Keep alerts after timeout' : 'Enable alerts'}</button>}
       {permission === 'denied' && <span className="pill danger">Blocked in browser</span>}
       {permission === 'unsupported' && <span className="pill">Unsupported</span>}
