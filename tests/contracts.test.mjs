@@ -30,6 +30,20 @@ test('recent activity renders only the sanitized feed projection', () => {
   assert.doesNotMatch(app, /chiefApi\.jobState/);
 });
 
+test('job login refuses and revokes a session created for an unsupported role', () => {
+  assert.match(app, /await chiefApi\.login/);
+  assert.match(app, /!\['Owner', 'Administrator'\]\.includes\(active\.principal\.role\)/);
+  assert.match(app, /await chiefApi\.logout\(active\.csrf\)/);
+  assert.match(app, /clearPrivateView\(\)/);
+});
+
+test('private view is cleared on auth denial and account/session change', () => {
+  assert.match(app, /const clearPrivateView = useCallback/);
+  assert.match(app, /active\.principal\.id !== session\.principal\.id/);
+  assert.match(app, /active\.principal\.session_id !== session\.principal\.session_id/);
+  assert.match(app, /\[401, 403\]\.includes\(cause\.status\)/);
+});
+
 test('service worker never caches Chief API responses', () => {
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
   assert.match(worker, /event\.respondWith\(fetch\(request\)\)/);
@@ -47,6 +61,7 @@ test('service worker supports background push reception and safe click routing',
   assert.match(worker, /showNotification/);
   assert.match(worker, /addEventListener\('notificationclick'/);
   assert.match(worker, /target\.origin !== SCOPE_URL\.origin/);
+  assert.match(worker, /target\.pathname === SCOPE_PATH/);
   assert.match(worker, /requireInteraction:\s*severity === 'URGENT'/);
 });
 
@@ -67,7 +82,9 @@ test('browser persistence is limited to an identity-scoped notification cursor',
 });
 
 test('PWA is scoped to the Job Agent path', () => {
+  assert.equal(manifest.id, '/jobs/');
   assert.equal(manifest.scope, '/jobs/');
   assert.equal(manifest.start_url, '/jobs/');
+  assert.match(registration, /EXPECTED_BASE = '\/jobs\/'/);
   assert.match(vite, /base: '\/jobs\/'/);
 });
