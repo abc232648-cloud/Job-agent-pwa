@@ -43,10 +43,30 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const initializedFeed = useRef(false);
 
+  const clearPrivateView = useCallback(() => {
+    setSession(null);
+    setActivity(null);
+    setNotifications([]);
+    setPushStatus(NO_PUSH);
+    setBackgroundPushConnected(false);
+    initializedFeed.current = false;
+  }, []);
+
   const refresh = useCallback(async (announce = true) => {
     if (!session) return;
     setRefreshing(true);
     try {
+      const active = await chiefApi.session();
+      if (!['Owner', 'Administrator'].includes(active.principal.role)) {
+        clearPrivateView();
+        throw new ChiefApiError(403, 'Owner or Administrator access is required.');
+      }
+      if (active.principal.id !== session.principal.id || active.principal.session_id !== session.principal.session_id || active.csrf !== session.csrf) {
+        setActivity(null); setNotifications([]); setPushStatus(NO_PUSH); setBackgroundPushConnected(false);
+        initializedFeed.current = false;
+        setSession(active);
+        return;
+      }
       const [nextActivity, nextNotifications] = await Promise.all([chiefApi.jobFeed(), chiefApi.jobNotifications()]);
       setActivity(nextActivity);
       setNotifications(nextNotifications);
@@ -64,8 +84,8 @@ export default function App() {
             .filter((item) => item.id > stored && (item.severity === 'ACTION_REQUIRED' || item.severity === 'URGENT'))
             .sort((a, b) => a.id - b.id);
           for (const item of newAttention) {
-            await showForegroundNotification(item.title, {
-              body: item.body.slice(0, 500),
+            await showForegroundNotification('Chief update', {
+              body: 'Sign in to view your update.',
               tag: `chief-job-${item.id}`,
               data: { url: '/jobs/', severity: item.severity },
               requireInteraction: item.severity === 'URGENT'
@@ -75,12 +95,14 @@ export default function App() {
         localStorage.setItem(storageKey, String(maxId));
       }
     } catch (cause) {
-      if (cause instanceof ChiefApiError && cause.status === 401) setSession(null);
+      if (cause instanceof ChiefApiError && [401, 403].includes(cause.status)) {
+        clearPrivateView();
+      }
       setError(cause instanceof Error ? cause.message : 'Unable to refresh Job Agent data.');
     } finally {
       setRefreshing(false);
     }
-  }, [session, backgroundPushConnected]);
+  }, [session, backgroundPushConnected, clearPrivateView]);
 
   const reconcilePush = useCallback(async () => {
     if (!session) return;
@@ -98,7 +120,7 @@ export default function App() {
         return;
       }
       const result = await chiefApi.registerJobPush(existing.toJSON(), session.csrf);
-      setPushStatus({ ...status, subscribed: true, subscription_count: result.subscription_count });
+      setPushStatus({ ...status, subscribed: true, after_timeout: result.after_timeout, subscription_count: result.subscription_count });
       setBackgroundPushConnected(true);
     } catch (cause) {
       setBackgroundPushConnected(false);
@@ -109,8 +131,11 @@ export default function App() {
   }, [session, permission]);
 
   useEffect(() => {
-    void chiefApi.session().then((value) => setSession(value)).catch(() => setSession(null)).finally(() => setAuthChecked(true));
-  }, []);
+    void chiefApi.session().then((value) => {
+      if (['Owner', 'Administrator'].includes(value.principal.role)) setSession(value);
+      else { clearPrivateView(); setError('Owner or Administrator access is required.'); }
+    }).catch(() => clearPrivateView()).finally(() => setAuthChecked(true));
+  }, [clearPrivateView]);
 
   useEffect(() => {
     if (!session) return;
@@ -135,24 +160,24 @@ export default function App() {
       await chiefApi.login(username.trim(), password);
       const active = await chiefApi.session();
       if (!['Owner', 'Administrator'].includes(active.principal.role)) {
+        try { await chiefApi.logout(active.csrf); } catch { /* The role is still refused locally; server expiry remains authoritative. */ }
+        clearPrivateView();
+        setPassword('');
         setError('This Job Agent oversight PWA requires an Owner or Administrator identity.');
         return;
       }
       setSession(active);
       setPassword('');
     } catch (cause) {
+      clearPrivateView();
       setError(cause instanceof Error ? cause.message : 'Sign-in failed.');
     }
   }
 
   async function signOut() {
     if (!session) return;
-    try { await chiefApi.logout(session.csrf); } catch {}
-    setSession(null);
-    setActivity(null);
-    setNotifications([]);
-    setPushStatus(NO_PUSH);
-    setBackgroundPushConnected(false);
+    try { await chiefApi.logout(session.csrf); } catch { setError('Sign-out could not be confirmed. Please retry.'); return; }
+    clearPrivateView();
   }
 
   async function enableNotifications() {
@@ -169,10 +194,10 @@ export default function App() {
       const prefs = await chiefApi.notificationPreferences();
       const status = prefs.job_push ?? NO_PUSH;
       setPushStatus(status);
-      if (!status.configured) return; // Foreground alerts still work while the PWA is open.
+      if (!status.configured) return;
       const subscription = await ensurePushSubscription(status.public_key);
-      const registered = await chiefApi.registerJobPush(subscription.toJSON(), session.csrf);
-      setPushStatus({ ...status, subscribed: true, subscription_count: registered.subscription_count });
+      const registered = await chiefApi.registerJobPush(subscription.toJSON(), session.csrf, true);
+      setPushStatus({ ...status, subscribed: true, after_timeout: registered.after_timeout, subscription_count: registered.subscription_count });
       setBackgroundPushConnected(true);
     } catch (cause) {
       setBackgroundPushConnected(false);
@@ -218,7 +243,9 @@ export default function App() {
   }
 
   const deliveryText = backgroundPushConnected
-    ? 'Background Web Push is connected. ASK and STOP alerts can arrive while this PWA is closed.'
+    ? pushStatus.after_timeout
+      ? 'Generic ASK/STOP alerts may continue after Chief idle timeout under this device consent. Sign in to view private details.'
+      : 'Background Web Push is connected only while the current Chief session remains valid.'
     : permission === 'granted' && !pushStatus.configured
       ? 'Foreground alerts work while this PWA is open. Chief background Web Push is not configured yet.'
       : permission === 'granted'
@@ -236,7 +263,8 @@ export default function App() {
     <section className="notice panel">
       <div><strong>Notification delivery</strong><p className="muted">{deliveryText}</p></div>
       {backgroundPushConnected && <button className="secondary" disabled={notificationBusy} onClick={() => void disableBackgroundPush()}>{notificationBusy ? 'Updating…' : 'Disable background'}</button>}
-      {!backgroundPushConnected && permission !== 'denied' && permission !== 'unsupported' && <button disabled={notificationBusy} onClick={() => void enableNotifications()}>{notificationBusy ? 'Connecting…' : permission === 'granted' && pushStatus.configured ? 'Connect background' : 'Enable alerts'}</button>}
+      <p>Explicit after-timeout device consent does not keep you signed in. Sign-out, account switching, access changes, or disabling Job access stops delivery.</p>
+      {(!backgroundPushConnected || !pushStatus.after_timeout) && permission !== 'denied' && permission !== 'unsupported' && <button disabled={notificationBusy} onClick={() => void enableNotifications()}>{notificationBusy ? 'Connecting…' : permission === 'granted' && pushStatus.configured ? 'Keep alerts after timeout' : 'Enable alerts'}</button>}
       {permission === 'denied' && <span className="pill danger">Blocked in browser</span>}
       {permission === 'unsupported' && <span className="pill">Unsupported</span>}
       {backgroundPushConnected && <span className="pill ok">Background connected</span>}

@@ -47,6 +47,7 @@ export interface JobActivityFeed {
 }
 
 export interface JobPushStatus {
+  after_timeout?: boolean;
   configured: boolean;
   public_key: string;
   subscribed: boolean;

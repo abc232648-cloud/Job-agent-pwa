@@ -1,13 +1,15 @@
+const BUILD_ID = 'development';
+const BUILD_ASSETS = [];
 // Chief Job Agent PWA — scoped cache + notification receiver.
 const CACHE_PREFIX = 'chief-jobs-static-';
-const CACHE_VERSION = `${CACHE_PREFIX}v1`;
+const CACHE_VERSION = `${CACHE_PREFIX}${BUILD_ID}`;
 const SCOPE_URL = new URL(self.registration.scope);
 const SCOPE_PATH = SCOPE_URL.pathname.replace(/\/$/, '');
 const shell = (suffix) => `${SCOPE_PATH}${suffix}`;
 const STATIC_ASSETS = [shell('/'), shell('/index.html'), shell('/manifest.webmanifest'), shell('/icon.svg')];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(STATIC_ASSETS)));
+  event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(STATIC_ASSETS.concat(BUILD_ASSETS))));
 });
 
 self.addEventListener('activate', (event) => {
@@ -58,8 +60,8 @@ self.addEventListener('push', (event) => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
   const severity = ['INFO', 'ACTION_REQUIRED', 'URGENT'].includes(payload.severity) ? payload.severity : 'INFO';
-  const title = typeof payload.title === 'string' && payload.title.trim() ? payload.title.slice(0, 160) : 'Chief Job Agent';
-  const body = typeof payload.body === 'string' ? payload.body.slice(0, 500) : 'Job Agent activity requires attention.';
+  const title = 'Chief update';
+  const body = 'Sign in to view your update.';
   const tag = typeof payload.tag === 'string' ? payload.tag.slice(0, 120) : `job-agent-${Date.now()}`;
   const url = safeTarget(payload.url);
 
