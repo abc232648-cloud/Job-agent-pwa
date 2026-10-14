@@ -1,0 +1,7 @@
+{
+  "format_version": 1,
+  "app": "jobs",
+  "release_set": "chief-install-closure-2026-10-14",
+  "backend_contract": "chief-install-closure-v1",
+  "route": "/jobs/"
+}
